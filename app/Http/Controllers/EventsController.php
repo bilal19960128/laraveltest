@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Event;
+use App\Models\Workshop;
+use Carbon\Carbon;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Bus\DispatchesJobs;
 use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\DB;
 
 class EventsController extends BaseController
 {
@@ -101,7 +104,17 @@ class EventsController extends BaseController
      */
 
     public function getEventsWithWorkshops() {
-        throw new \Exception('implement in coding task 1');
+        //throw new \Exception('implement in coding task 1');
+
+        $events = DB::table('events')
+            ->leftJoin('workshops', 'events.id', '=', 'workshops.event_id')
+            ->select('events.*', DB::raw('GROUP_CONCAT(workshops.id, workshops.start, workshops.end, workshops.name) as workshops'))
+            ->groupBy('events.id')
+            ->get();
+
+        return $events;
+
+
     }
 
 
@@ -179,6 +192,26 @@ class EventsController extends BaseController
      */
 
     public function getFutureEventsWithWorkshops() {
-        throw new \Exception('implement in coding task 2');
+        //throw new \Exception('implement in coding task 2');
+
+        $futureWorkshops = Workshop::where('start', '>', Carbon::now())->get();
+
+        $workshopsByEvent = $futureWorkshops->groupBy('event_id');
+
+        $eventIdsWithFutureWorkshops = $workshopsByEvent->keys();
+
+        $futureEvents = Event::whereIn('id', $eventIdsWithFutureWorkshops)
+            ->whereHas('workshops', function ($query) use ($eventIdsWithFutureWorkshops) {
+                $query->whereIn('event_id', $eventIdsWithFutureWorkshops)
+                    ->where('start', '>', Carbon::now());
+            })
+            ->with(['workshops' => function ($query) use ($workshopsByEvent) {
+                $query->whereIn('id', $workshopsByEvent[$query->getQuery()->wheres[0]['value']])
+                    ->orderBy('start');
+            }])
+            ->orderBy('id')
+            ->get();
+
+        return $futureEvents;
     }
 }
